@@ -82,6 +82,26 @@ packFolder(const std::filesystem::path &folderPath,
         std::filesystem::path rel = root_Path / relative;
 
         auto dataUncompressed = readFile(entry.path());
+        if(dataUncompressed.size() < 3)
+        {
+            std::string error(
+                reinterpret_cast<char *>(dataUncompressed.data()));
+            if(error == TELLG_FAIL)
+            {
+                std::cerr << "Tellg fialed\n";
+                return TELLG_FAIL_CODE;
+            }
+            else if(error == FAIL_IFREAD)
+            {
+                std::cerr << "Ifstream read failed\n";
+                return IFSTREAM_FAIL_READ_CODE;
+            }
+            else if(error == IFSTREAM_FAIL)
+            {
+                std::cerr << "Failed to create ifstream\n";
+                return IFSTREAM_FAIL_CODE;
+            }
+        }
 
         if(dataUncompressed.empty())
             continue;
@@ -210,7 +230,7 @@ packFolder(const std::filesystem::path &folderPath,
         if(ciph == -1)
         {
             std::cout << "failed to encrypt data\n";
-            return -1;
+            return -5;
         }
     }
     else

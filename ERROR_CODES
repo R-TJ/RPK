@@ -1,0 +1,10 @@
+1: Too few arguments for the CLI(Only in the CLI, not applicable in the library)
+
+-1: Failed to initialise libsodium
+-2: Failed to encypt with libsodium
+-3: Failed to create an ofstream
+-4: Failed to write to an ofstream
+-5: Failed to create the Pak_dir ofstream
+-6: Failed to use tellg to get the size of a file
+-7: Failed to create an ifstream
+-8: Failed to read from an ifstream

@@ -1,1 +1,3 @@
-Change the loader to only store max 200 open archives
+Fix multi file open fault
+Stream compression
+multithreaded decompression + read
