@@ -1,3 +1,5 @@
+GLOBAL
+
 1: Too few arguments for the CLI(Only in the CLI, not applicable in the library)
 
 -1: Failed to initialise libsodium
@@ -8,3 +10,11 @@
 -6: Failed to use tellg to get the size of a file
 -7: Failed to create an ifstream
 -8: Failed to read from an ifstream
+-12: Failed to unmap a file
+-13: Failed to decrypt with libsodium
+-14: Failed to resize a array
+
+Mac, Unix and Linux specific
+-9: Failed to open file
+-10: Failed to fstat
+-11: Failed to mmap

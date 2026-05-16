@@ -57,7 +57,7 @@ NPK::un_map_file(std::string &file_path)
 #include <sys/stat.h>
 #include <unistd.h>
 
-void
+int
 NPK::mapFile(const std::string &archivepath)
 {
     std::cout << archivepath + "\n";
@@ -68,7 +68,7 @@ NPK::mapFile(const std::string &archivepath)
     if(a.fd < 0)
     {
         perror(("open failed: " + archivepath).c_str());
-        return;
+        return OPEN_FAIL_CODE;
     }
 
     struct stat st;
@@ -76,7 +76,7 @@ NPK::mapFile(const std::string &archivepath)
     {
         perror("fstat failed");
         close(a.fd);
-        return;
+        return FSTAT_FAIL_CODE;
     }
 
     a.size = st.st_size;
@@ -88,13 +88,15 @@ NPK::mapFile(const std::string &archivepath)
     {
         perror("mmap failed");
         close(a.fd);
-        return;
+        return MMAP_FAIL_CODE;
     }
 
     a.data = static_cast<const char *>(ptr);
     a.path = archivepath;
 
     archives.push_back(a);
+
+    return 0;
 }
 
 void
@@ -108,9 +110,10 @@ NPK::unMap()
     }
 }
 
-void
+int
 NPK::un_map_file(std::string &file_path)
 {
+    bool unarchived = false;
     for(auto &archive : archives)
     {
         if(archive.path == file_path)
@@ -119,13 +122,16 @@ NPK::un_map_file(std::string &file_path)
             munmap(data, archive.size);
             close(archive.fd);
 
-            std::swap(archive, archives.back());
-            archives.pop_back();
-
-            archives.emplace_back();
-            std::swap(archives.front(), archives.back());
+            unarchived = true;
         }
     }
+
+    if(unarchived == false)
+    {
+        return UN_MAP_FAIL_CODE;
+    }
+
+    return 0;
 }
 
 #endif
@@ -134,11 +140,19 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
 {
     if(sodium_init() < 0)
     {
-        std::cout << "sodium failed init\n";
+        std::cerr << "sodium failed init\n";
+        initialised = false;
+        error_code = -1;
         return;
     }
 
-    mapFile(pak_dir);
+    int code = mapFile(pak_dir);
+    if(code < 0)
+    {
+        initialised = false;
+        error_code = code;
+        return;
+    }
 
     const char *data = archives.back().data;
 
@@ -175,6 +189,8 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
         if(ciph < 0)
         {
             std::cerr << "failed to decrypt\n";
+            initialised = false;
+            error_code = DECRYPT_FAIL_CODE;
             return;
         }
 
@@ -183,6 +199,13 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
     }
 
     files.resize(filecount);
+    if(files.size() != filecount)
+    {
+        std::cerr << "Failed to resize vector: files\n";
+        initialised = false;
+        error_code = VECTOR_RESIZE_FAIL_CODE;
+        return;
+    }
 
     for(auto &file : files)
     {
@@ -214,11 +237,6 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
         std::memcpy(temp.data(), data + offset, file.archivepathsize);
         offset += file.archivepathsize;
         std::filesystem::path tmp2(temp);
-        std::cout << "archive Path: " + tmp2.generic_string()
-                         + " size: " + std::to_string(file.archivepathsize)
-                         + " offset: " + std::to_string(offset)
-                         + " path size: " + std::to_string(file.pathsize)
-                         + " path: " + file.path.generic_string() + "\n";
         file.archivepath = tmp2;
 
         bool archiveExists = false;
@@ -236,6 +254,10 @@ NPK::LoadFile(std::string filePath)
         {
             bool archived = false;
             const char *archive_ptr;
+            if(archives.size() > 16)
+            {
+                unMap();
+            }
             for(auto &archive : archives)
             {
                 if(archive.path == file.path.generic_string())
@@ -248,8 +270,6 @@ NPK::LoadFile(std::string filePath)
 
             if(!archived)
             {
-                std::swap(archives.front(), archives.back());
-                archives.pop_back();
                 mapFile(file.archivepath.generic_string());
                 archive_ptr = archives.back().data;
             }
@@ -276,8 +296,7 @@ NPK::LoadFile(std::string filePath)
                 return {};
             }
 
-            file.data.resize(result);
-            file.data = decompData;
+            file.data = std::move(decompData);
 
             file.loaded = true;
 
@@ -296,6 +315,7 @@ NPK::unload_File(std::string path)
         if(file.path == path)
         {
             file.data.resize(0);
+            file.loaded = false;
         }
     }
 }
@@ -331,17 +351,15 @@ main(int argc, char *argv[])
 
     for(auto &file : *files)
     {
-        std::cout << file.path.generic_string() << std::endl;
         auto data = npk.LoadFile(file.path.generic_string());
 
-        std::cout << "file Path: " << file.path.generic_string() << std::endl;
         if(file.path.has_parent_path())
         {
             std::filesystem::create_directories(file.path.parent_path());
         }
 
         std::ofstream of("." / file.path);
-        of.write(reinterpret_cast<char *>(file.data.data()), file.size);
+        of.write(reinterpret_cast<char *>(file.data.data()), file.data.size());
         of.close();
     }
 

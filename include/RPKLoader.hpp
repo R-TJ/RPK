@@ -61,10 +61,13 @@ public:
     
     void unload_File(std::string path);
 
+    bool initialised = false;
+    int error_code = 0;
+
 private:
-	void mapFile(const std::string& archivepath);
+	int mapFile(const std::string& archivepath);
 	void unMap();
-    void un_map_file(std::string& file_path);
+    int un_map_file(std::string& file_path);
 	std::vector<archive> archives;
 	std::vector<file> files;
 

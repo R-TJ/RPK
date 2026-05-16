@@ -33,3 +33,6 @@ The encryption is an option to encrypt the Pak_dir.npk with aead aegis256 with l
 ./Unpacker <encryption>
 '''
 The executable must be in the same folder as the Pak_dir.npk
+
+### Library
+ALWAYS CHECK THE ERROR CODE AFTER CREATING THE CLASS

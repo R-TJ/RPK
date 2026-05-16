@@ -19,6 +19,8 @@ readFile(const std::filesystem::path &path)
         return {};
     }
     std::streamsize size = static_cast<std::streamsize>(end);
+    std::cout << std::to_string(size) + " size of: " + path.generic_string()
+                     + "\n";
     file.seekg(0, std::ios::beg);
 
     if(size == 0)
@@ -196,6 +198,9 @@ packFolder(const std::filesystem::path &folderPath,
 
         std::memcpy(pak_data.get() + offset, &file.size, sizeof(file.size));
         offset += sizeof(file.size);
+        std::cout << "size: " + std::to_string(file.originalsize) + " "
+                         + file.path + "\n";
+        std::cout << "compressed size: " + std::to_string(file.size) + "\n";
 
         std::memcpy(pak_data.get() + offset, &file.originalsize,
                     sizeof(file.originalsize));
