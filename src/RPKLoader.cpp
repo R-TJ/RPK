@@ -58,9 +58,9 @@ NPK::un_map_file(std::string &file_path)
 #include <unistd.h>
 
 int
-NPK::mapFile(const std::string &archivepath)
+RPK::mapFile(const std::string &archivepath)
 {
-    std::cout << archivepath + "\n";
+    std::cout << archivepath << std::endl;
 
     archive a;
 
@@ -81,7 +81,7 @@ NPK::mapFile(const std::string &archivepath)
 
     a.size = st.st_size;
 
-    std::cout << std::to_string(a.size) + "\n";
+    std::cout << a.size << std::endl;
 
     void *ptr = mmap(nullptr, a.size, PROT_READ, MAP_PRIVATE, a.fd, 0);
     if(ptr == MAP_FAILED)
@@ -100,7 +100,7 @@ NPK::mapFile(const std::string &archivepath)
 }
 
 void
-NPK::unMap()
+RPK::unMap()
 {
     for(auto &archive : archives)
     {
@@ -111,7 +111,7 @@ NPK::unMap()
 }
 
 int
-NPK::un_map_file(std::string &file_path)
+RPK::un_map_file(std::string &file_path)
 {
     bool unarchived = false;
     for(auto &archive : archives)
@@ -134,19 +134,21 @@ NPK::un_map_file(std::string &file_path)
     return 0;
 }
 
-#endif
+#endif // Mac and Linux
 
-NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
+RPK::RPK(std::string pak_dir, bool encrypt, unsigned char *key)
 {
     if(sodium_init() < 0)
     {
         std::cerr << "sodium failed init\n";
         initialised = false;
-        error_code = -1;
+        error_code = LIBSODIUM_FAIL_CODE;
         return;
     }
 
-    int code = mapFile(pak_dir);
+    std::filesystem::path pak_fspath(pak_dir);
+
+    int code = mapFile(pak_fspath.generic_string());
     if(code < 0)
     {
         initialised = false;
@@ -156,17 +158,14 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
 
     const char *data = archives.back().data;
 
-    uint32_t filecount;
+    size_t filecount;
     std::memcpy(&filecount, data, sizeof(filecount));
-    std::cout << "Filecount: " + std::to_string(filecount) + "\n";
 
-    uint64_t offset = sizeof(filecount);
+    size_t offset = sizeof(filecount);
 
     unsigned long long size;
     std::memcpy(&size, data + offset, sizeof(size));
     offset += sizeof(size);
-
-    std::cout << "size: " + std::to_string(size) + "\n";
 
     if(encrypt)
     {
@@ -188,7 +187,7 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
 
         if(ciph < 0)
         {
-            std::cerr << "failed to decrypt\n";
+            std::cerr << "Failed to decrypt\n";
             initialised = false;
             error_code = DECRYPT_FAIL_CODE;
             return;
@@ -243,10 +242,8 @@ NPK::NPK(std::string pak_dir, bool encrypt, unsigned char *key)
     }
 }
 
-NPK::~NPK() { unMap(); }
-
 std::vector<unsigned char> *
-NPK::LoadFile(std::string filePath)
+RPK::LoadFile(std::string filePath)
 {
     for(auto &file : files)
     {
@@ -308,7 +305,7 @@ NPK::LoadFile(std::string filePath)
 }
 
 void
-NPK::unload_File(std::string path)
+RPK::unload_File(std::string path)
 {
     for(auto &file : files)
     {
@@ -319,6 +316,8 @@ NPK::unload_File(std::string path)
         }
     }
 }
+
+RPK::~RPK() { unMap(); }
 
 #ifdef CLI
 

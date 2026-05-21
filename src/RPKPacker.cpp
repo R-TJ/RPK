@@ -1,6 +1,6 @@
 #include "RPKPacker.hpp"
 
-std::vector<unsigned char>
+std::optional<std::vector<unsigned char>>
 readFile(const std::filesystem::path &path)
 {
     std::ifstream file(path, std::ios::binary);
@@ -8,33 +8,10 @@ readFile(const std::filesystem::path &path)
     if(!file.is_open())
     {
         std::cerr << "Failed to open file: " << path << std::endl;
-        return {};
+        return std::nullopt;
     }
 
-    file.seekg(0, std::ios::end);
-    auto end = file.tellg();
-    if(end < 0)
-    {
-        std::cerr << "tellg failed: " << path << "\n";
-        return {};
-    }
-    std::streamsize size = static_cast<std::streamsize>(end);
-    std::cout << std::to_string(size) + " size of: " + path.generic_string()
-                     + "\n";
-    file.seekg(0, std::ios::beg);
-
-    if(size == 0)
-    {
-        return {};
-    }
-
-    std::vector<unsigned char> buffer(size);
-
-    if(!file.read(reinterpret_cast<char *>(buffer.data()), size))
-    {
-        std::cerr << "Failed to read file: " << path << std::endl;
-        return {};
-    }
+    std::vector<unsigned char> buffer(std::istream_iterator<char>(file), {});
 
     return buffer;
 }
@@ -44,12 +21,12 @@ packFolder(const std::filesystem::path &folderPath,
            const std::filesystem::path &root_Path, int compression_level,
            int max_archive_size, bool encrypt, unsigned char *key)
 {
-    max_archive_size *= 1000 * 1000;
+    max_archive_size *= 1024 * 1024; // 1 MiB
 
     if(sodium_init() < 0)
     {
         std::cout << "Failed to initialise libsodium";
-        return -1;
+        return LIBSODIUM_FAIL_CODE;
     }
 
     auto nonce
@@ -57,24 +34,24 @@ packFolder(const std::filesystem::path &folderPath,
 
     randombytes(nonce.get(), crypto_aead_aegis256_NPUBBYTES);
 
-    std::vector<FileEntry> files;
+    std::vector<File> files;
 
     uint16_t archives = 0;
 
     std::filesystem::path archivesPath
-        = "Pak_" + std::to_string(archives) + ".npk";
+        = "Pak_" + std::to_string(archives) + ".rpk";
 
     std::ofstream of(archivesPath, std::ios::binary);
 
     if(!of.is_open())
     {
-        std::cout << "Failed to create file: " + archivesPath.generic_string()
-                         + "\n";
-        return -2;
+        std::cout << "Failed to create file: " << archivesPath << std::endl;
+        return OFSTREAM_FAIL_CODE;
     }
 
-    for(auto &entry :
-        std::filesystem::recursive_directory_iterator(folderPath))
+    for(auto &entry : std::filesystem::recursive_directory_iterator(
+            folderPath,
+            std::filesystem::directory_options::skip_permission_denied))
     {
         if(!entry.is_regular_file() || entry.path().filename() == ".DS_Store")
             continue;
@@ -84,42 +61,29 @@ packFolder(const std::filesystem::path &folderPath,
         std::filesystem::path rel = root_Path / relative;
 
         auto dataUncompressed = readFile(entry.path());
-        if(dataUncompressed.size() < 3)
+
+        if(!dataUncompressed.has_value())
         {
-            std::string error(
-                reinterpret_cast<char *>(dataUncompressed.data()));
-            if(error == TELLG_FAIL)
-            {
-                std::cerr << "Tellg fialed\n";
-                return TELLG_FAIL_CODE;
-            }
-            else if(error == FAIL_IFREAD)
-            {
-                std::cerr << "Ifstream read failed\n";
-                return IFSTREAM_FAIL_READ_CODE;
-            }
-            else if(error == IFSTREAM_FAIL)
-            {
-                std::cerr << "Failed to create ifstream\n";
-                return IFSTREAM_FAIL_CODE;
-            }
+            return IFSTREAM_FAIL_CODE;
         }
 
-        if(dataUncompressed.empty())
+        if(dataUncompressed->empty())
+        {
+            std::cout << "Warning, skipping empty file: " << entry.path();
             continue;
+        }
 
         std::vector<unsigned char> data(
-            LZ4_compressBound(dataUncompressed.size()));
+            LZ4_compressBound(dataUncompressed->size()));
 
         int result = LZ4_compress_HC(
-            reinterpret_cast<char *>(dataUncompressed.data()),
-            reinterpret_cast<char *>(data.data()), dataUncompressed.size(),
+            reinterpret_cast<char *>(dataUncompressed->data()),
+            reinterpret_cast<char *>(data.data()), dataUncompressed->size(),
             data.size(), compression_level);
 
-        if(result < 0)
+        if(result <= 0)
         {
-            std::cerr << "failed to compress file: "
-                      << relative.generic_string() << std::endl;
+            std::cerr << "Failed to compress file: " << relative << std::endl;
             continue;
         }
 
@@ -129,61 +93,71 @@ packFolder(const std::filesystem::path &folderPath,
 
         auto &file = files.back();
 
-        file.size = result;
-        file.originalsize = dataUncompressed.size();
-        file.pathsize = rel.generic_string().size();
+        file.compressed_size = result;
+        file.original_size = dataUncompressed->size();
+        file.path_size = rel.generic_string().size();
         file.path = rel.generic_string();
 
+        if(of.tellp() < 0)
+        {
+            std::cerr << "Tellp failed\n";
+            return TELLP_FAIL_CODE;
+        }
         file.offset = of.tellp();
-        file.archivepath = archivesPath.generic_string();
-        file.archivepathsize = archivesPath.generic_string().size();
+        file.archive_path = archivesPath.generic_string();
+        file.archive_path_size = archivesPath.generic_string().size();
 
-        of.write(reinterpret_cast<char *>(data.data()), result);
+        of.write(reinterpret_cast<char *>(data.data()), file.compressed_size);
+
+        if(!of)
+        {
+            std::cerr << "Failed to write to file: " << file.path << std::endl;
+            return OFSTREAM_WRITE_FAIL;
+        }
 
         if(of.tellp() > max_archive_size)
         {
             of.close();
             archives++;
-            archivesPath = "Pak_" + std::to_string(archives) + ".npk";
+            archivesPath = "Pak_" + std::to_string(archives) + ".rpk";
 
             of.open(archivesPath, std::ios::binary);
 
             if(!of.is_open())
             {
-                std::cout << "failed to make archive: "
-                                 + archivesPath.generic_string();
-                return -2;
+                std::cout << "Failed to make archive: " << archivesPath;
+                return OFSTREAM_FAIL_CODE;
             }
         }
     }
 
-    std::ofstream Pak_dir("Pak_dir.npk", std::ios::binary);
+    std::ofstream Pak_dir("Pak_dir.rpk", std::ios::binary);
 
     if(!Pak_dir.is_open())
     {
-        std::cerr << "failed to create Pak_dir archive\n";
-        return -3;
+        std::cerr << "Failed to create Pak_dir archive\n";
+        return PAK_DIR_FAIL_CODE;
     }
 
-    uint32_t size = files.size();
+    size_t size = files.size();
     Pak_dir.write(reinterpret_cast<const char *>(&size), sizeof(size));
 
     if(!Pak_dir)
     {
-        std::cerr << "size write failed\n";
-        return -4;
+        std::cerr << "Size write failed\n";
+        return OFSTREAM_WRITE_FAIL;
     }
 
     size_t ex_size = 0;
     for(auto &file : files)
     {
-        ex_size += sizeof(file.archivepathsize);
-        ex_size += sizeof(file.originalsize);
-        ex_size += sizeof(file.pathsize);
-        ex_size += sizeof(file.size);
+        ex_size += sizeof(file.archive_path_size);
+        ex_size += sizeof(file.original_size);
+        ex_size += sizeof(file.path_size);
+        ex_size += sizeof(file.compressed_size);
         ex_size += sizeof(file.offset);
-        ex_size += file.pathsize;
-        ex_size += file.archivepathsize;
+        ex_size += file.path_size;
+        ex_size += file.archive_path_size;
     }
 
     auto pak_data = std::make_unique<unsigned char[]>(ex_size);
@@ -196,30 +170,28 @@ packFolder(const std::filesystem::path &folderPath,
                     sizeof(file.offset));
         offset += sizeof(file.offset);
 
-        std::memcpy(pak_data.get() + offset, &file.size, sizeof(file.size));
-        offset += sizeof(file.size);
-        std::cout << "size: " + std::to_string(file.originalsize) + " "
-                         + file.path + "\n";
-        std::cout << "compressed size: " + std::to_string(file.size) + "\n";
+        std::memcpy(pak_data.get() + offset, &file.compressed_size,
+                    sizeof(file.compressed_size));
+        offset += sizeof(file.compressed_size);
 
-        std::memcpy(pak_data.get() + offset, &file.originalsize,
-                    sizeof(file.originalsize));
-        offset += sizeof(file.originalsize);
+        std::memcpy(pak_data.get() + offset, &file.original_size,
+                    sizeof(file.original_size));
+        offset += sizeof(file.original_size);
 
-        std::memcpy(pak_data.get() + offset, &file.pathsize,
-                    sizeof(file.pathsize));
-        offset += sizeof(file.pathsize);
+        std::memcpy(pak_data.get() + offset, &file.path_size,
+                    sizeof(file.path_size));
+        offset += sizeof(file.path_size);
 
-        std::memcpy(pak_data.get() + offset, &file.archivepathsize,
-                    sizeof(file.archivepathsize));
-        offset += sizeof(file.archivepathsize);
+        std::memcpy(pak_data.get() + offset, &file.archive_path_size,
+                    sizeof(file.archive_path_size));
+        offset += sizeof(file.archive_path_size);
 
-        std::memcpy(pak_data.get() + offset, file.path.data(), file.pathsize);
-        offset += file.pathsize;
+        std::memcpy(pak_data.get() + offset, file.path.data(), file.path_size);
+        offset += file.path_size;
 
-        std::memcpy(pak_data.get() + offset, file.archivepath.data(),
-                    file.archivepathsize);
-        offset += file.archivepathsize;
+        std::memcpy(pak_data.get() + offset, file.archive_path.data(),
+                    file.archive_path_size);
+        offset += file.archive_path_size;
     }
 
     std::unique_ptr<unsigned char[]> out;
@@ -234,8 +206,8 @@ packFolder(const std::filesystem::path &folderPath,
             nonce.get(), key);
         if(ciph == -1)
         {
-            std::cout << "failed to encrypt data\n";
-            return -5;
+            std::cerr << "Failed to encrypt data\n";
+            return ENCRYPT_FAIL_CODE;
         }
     }
     else
@@ -247,8 +219,8 @@ packFolder(const std::filesystem::path &folderPath,
     Pak_dir.write(reinterpret_cast<char *>(&out_size), sizeof(out_size));
     if(!Pak_dir)
     {
-        std::cerr << "failed out_size write\n";
-        return -4;
+        std::cerr << "Failed out_size write\n";
+        return OFSTREAM_WRITE_FAIL;
     }
 
     if(encrypt)
@@ -258,15 +230,15 @@ packFolder(const std::filesystem::path &folderPath,
         if(!Pak_dir)
         {
             std::cerr << "failed nonce write\n";
-            return -4;
+            return OFSTREAM_WRITE_FAIL;
         }
     }
 
     Pak_dir.write(reinterpret_cast<char *>(out.get()), out_size);
     if(!Pak_dir)
     {
-        std::cerr << "failed data write\n";
-        return -4;
+        std::cerr << "Failed data write\n";
+        return OFSTREAM_WRITE_FAIL;
     }
 
     return 0;
@@ -288,7 +260,7 @@ main(int argc, char *argv[])
     if(sodium_init() < 0)
     {
         std::cerr << "failed to init sodium";
-        return -1;
+        return LIBSODIUM_FAIL_CODE;
     }
 
     auto key
@@ -306,14 +278,19 @@ main(int argc, char *argv[])
 
     if(encrypt)
     {
-        std::ofstream of("key");
+        std::ofstream of("key.bin", std::ios::binary);
         if(!of.is_open())
         {
-            std::cerr << "failed to open key save file";
-            return -5;
+            std::cerr << "Failed to open key save file";
+            return OFSTREAM_FAIL_CODE;
         }
         of.write(reinterpret_cast<char *>(key.get()),
                  crypto_aead_aegis256_KEYBYTES);
+        if(!of)
+        {
+            std::cerr << "Failed to write key";
+            return OFSTREAM_WRITE_FAIL;
+        }
 
         std::cout << "Your key is stored in the key file\n";
     }

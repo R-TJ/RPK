@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <cstring>
+#include <optional>
 
 #include "lz4.h"
 #include "lz4hc.h"
@@ -14,17 +15,17 @@
 #include "sodium.h"
 #include "sodium/crypto_aead_aegis256.h"
 
-struct FileEntry {
-    uint64_t offset;
-    uint32_t size;
-    uint32_t originalsize;
-    uint16_t pathsize;
-    uint16_t archivepathsize;
+struct File {
+    size_t offset;
+    size_t compressed_size;
+    size_t original_size;
+    size_t path_size;
+    size_t archive_path_size;
     std::string path;
-    std::string archivepath;
+    std::string archive_path;
 };
 
-std::vector<unsigned char> readFile(const std::filesystem::path &path);
+std::optional<std::vector<unsigned char>> readFile(const std::filesystem::path &path);
 
 int
 packFolder(const std::filesystem::path &folderPath,

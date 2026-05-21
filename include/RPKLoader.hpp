@@ -37,22 +37,22 @@ struct archive
 };
 struct file
 {
-    uint64_t offset;
-    uint32_t size;
-    uint32_t originalsize;
-    uint16_t pathsize;
-    uint16_t archivepathsize;
+    size_t offset;
+    size_t size;
+    size_t originalsize;
+    size_t pathsize;
+    size_t archivepathsize;
     std::filesystem::path path;
     std::filesystem::path archivepath;
     std::vector<unsigned char> data;
     bool loaded = false;
 };
 
-class NPK
+class RPK
 {
 public:
-	NPK(std::string pak_dir, bool encrypt, unsigned char* key);
-	~NPK();
+	RPK(std::string pak_dir, bool encrypt, unsigned char* key);
+	~RPK();
 
 	std::vector<unsigned char>* LoadFile(std::string path);
     
