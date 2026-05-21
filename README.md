@@ -59,6 +59,6 @@ ALWAYS CHECK THE ERROR CODE AFTER CREATING THE CLASS
 ./RPK/build-mac/Packer RPK root 12 100 f
 ```
 
-It will pack the source code into files with the root set as "root" with max compression and a maximum size of 100MiB per archive and without encryption
+It will pack the source code into files with the root set as "root" with max compression and a maximum size of 100MB per archive and without encryption
 
 To acces the CMakeLists.txt you must use the path "root/RPK/CMakeLists.txt" because the actual path relative to the packed folder is RPK/CMakeLists.txt and the root path is "root"
