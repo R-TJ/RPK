@@ -60,7 +60,6 @@ NPK::un_map_file(std::string &file_path)
 int
 RPK::mapFile(const std::string &archivepath)
 {
-    std::cout << archivepath << std::endl;
 
     archive a;
 
@@ -80,8 +79,6 @@ RPK::mapFile(const std::string &archivepath)
     }
 
     a.size = st.st_size;
-
-    std::cout << a.size << std::endl;
 
     void *ptr = mmap(nullptr, a.size, PROT_READ, MAP_PRIVATE, a.fd, 0);
     if(ptr == MAP_FAILED)
@@ -249,15 +246,18 @@ RPK::LoadFile(std::string filePath)
     {
         if(file.path.generic_string() == filePath)
         {
+            auto start = std::chrono::steady_clock::now();
+
             bool archived = false;
             const char *archive_ptr;
-            if(archives.size() > 16)
+            if(archives.size() >= MAX_OPEN_FILES)
             {
                 unMap();
+                archives.resize(0);
             }
             for(auto &archive : archives)
             {
-                if(archive.path == file.path.generic_string())
+                if(archive.path == file.archivepath)
                 {
                     archived = true;
                     archive_ptr = archive.data;
@@ -296,6 +296,22 @@ RPK::LoadFile(std::string filePath)
             file.data = std::move(decompData);
 
             file.loaded = true;
+
+            auto end = std::chrono::steady_clock::now();
+            auto time = end - start;
+            auto time_dur
+                = std::chrono::duration_cast<std::chrono::milliseconds>(time)
+                      .count();
+
+            MS += time_dur;
+            MB += file.originalsize / 1000000.0f;
+            float diff = MS - old_time;
+            if(diff > 500)
+            {
+                MB_P_S = MB / (MS / 1000.0f);
+                std::cout << MB_P_S << "mb/s\n";
+                old_time = MS;
+            }
 
             return &file.data;
         }
@@ -339,12 +355,15 @@ main(int argc, char *argv[])
     auto key
         = std::make_unique<unsigned char[]>(crypto_aead_aegis256_KEYBYTES);
 
-    std::ifstream file("key");
-    file.read(reinterpret_cast<char *>(key.get()),
-              crypto_aead_aegis256_KEYBYTES);
-    file.close();
+    if(encrypt)
+    {
+        std::ifstream file("key");
+        file.read(reinterpret_cast<char *>(key.get()),
+                  crypto_aead_aegis256_KEYBYTES);
+        file.close();
+    }
 
-    NPK npk("./Pak_dir.npk", encrypt, key.get());
+    RPK npk("./Pak_dir.rpk", encrypt, key.get());
 
     auto files = npk.get_Files();
 

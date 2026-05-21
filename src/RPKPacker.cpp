@@ -21,7 +21,7 @@ packFolder(const std::filesystem::path &folderPath,
            const std::filesystem::path &root_Path, int compression_level,
            int max_archive_size, bool encrypt, unsigned char *key)
 {
-    max_archive_size *= 1024 * 1024; // 1 MiB
+    max_archive_size *= 1000 * 1000; // 1 MB
 
     if(sodium_init() < 0)
     {
@@ -49,12 +49,19 @@ packFolder(const std::filesystem::path &folderPath,
         return OFSTREAM_FAIL_CODE;
     }
 
+    float MB = 0;
+    float MS = 0;
+    float MB_P_S = 0;
+    float old_time = 0;
+
     for(auto &entry : std::filesystem::recursive_directory_iterator(
             folderPath,
             std::filesystem::directory_options::skip_permission_denied))
     {
         if(!entry.is_regular_file() || entry.path().filename() == ".DS_Store")
             continue;
+
+        auto start = std::chrono::steady_clock::now();
 
         auto relative = std::filesystem::relative(entry.path(),
                                                   folderPath.parent_path());
@@ -69,7 +76,8 @@ packFolder(const std::filesystem::path &folderPath,
 
         if(dataUncompressed->empty())
         {
-            std::cout << "Warning, skipping empty file: " << entry.path();
+            std::cout << "Warning, skipping empty file: " << entry.path()
+                      << std::endl;
             continue;
         }
 
@@ -128,6 +136,20 @@ packFolder(const std::filesystem::path &folderPath,
                 std::cout << "Failed to make archive: " << archivesPath;
                 return OFSTREAM_FAIL_CODE;
             }
+        }
+
+        auto end = std::chrono::steady_clock::now();
+        auto dur = end - start;
+        auto time = std::chrono::duration_cast<std::chrono::milliseconds>(dur)
+                        .count();
+        MB += file.original_size / 1000000.0f;
+        MS += time;
+        float diff = MS - old_time;
+        if(diff > 500)
+        {
+            MB_P_S = MB / (MS / 1000.0f);
+            std::cout << MB_P_S << "mb/s\n";
+            old_time = MS;
         }
     }
 

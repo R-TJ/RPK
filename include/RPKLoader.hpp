@@ -26,7 +26,7 @@ struct archive
     off_t size;
     const char* data;
 
-    std::string path;
+    std::filesystem::path path;
 
 #ifdef _WIN32
     HANDLE mapping;
@@ -72,4 +72,9 @@ private:
 	std::vector<file> files;
 
     std::unique_ptr<unsigned char[]> unencrypted;
+
+    float MB_P_S = 0;
+    float MS = 0;
+    float MB = 0;
+    float old_time = 0;
 };
