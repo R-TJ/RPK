@@ -26,7 +26,7 @@ CMake -B build
 ```
 
 
-The folder path is the path of the folder to pack. Works with relative paths. The output archives are put next to this folder
+The folder path is the path of the folder to pack. Works with relative paths. The output archives are put into the working directory, e.g. where you ran the executable from.
 
 The root path is a path to be put before the relative path of the file relative to the parent of the archived folder. This is quite confusing and better shown in examples
 
