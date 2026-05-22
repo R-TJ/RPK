@@ -133,8 +133,10 @@ RPK::un_map_file(std::string &file_path)
 
 #endif // Mac and Linux
 
-RPK::RPK(std::string pak_dir, bool encrypt, unsigned char *key)
+RPK::RPK(std::filesystem::path pak_dir, bool encrypt, unsigned char *key)
 {
+    std::filesystem::path parent_path = pak_dir.parent_path();
+
     if(sodium_init() < 0)
     {
         std::cerr << "sodium failed init\n";
@@ -233,7 +235,7 @@ RPK::RPK(std::string pak_dir, bool encrypt, unsigned char *key)
         std::memcpy(temp.data(), data + offset, file.archivepathsize);
         offset += file.archivepathsize;
         std::filesystem::path tmp2(temp);
-        file.archivepath = tmp2;
+        file.archivepath = parent_path / tmp2;
 
         bool archiveExists = false;
     }
@@ -267,7 +269,12 @@ RPK::LoadFile(std::string filePath)
 
             if(!archived)
             {
-                mapFile(file.archivepath.generic_string());
+                int err = mapFile(file.archivepath.generic_string());
+                if(err < 0)
+                {
+                    std::cerr << "mmap failed with code: " << err << std::endl;
+                    return {};
+                }
                 archive_ptr = archives.back().data;
             }
 
@@ -289,7 +296,8 @@ RPK::LoadFile(std::string filePath)
 
             if(result <= 0)
             {
-                std::cerr << "failed to decompress\n";
+                std::cerr << "Failed to decompress" << file.path << std::endl
+                          << file.archivepath << std::endl;
                 return {};
             }
 
@@ -340,10 +348,10 @@ RPK::~RPK() { unMap(); }
 int
 main(int argc, char *argv[])
 {
-    if(argc < 2)
+    if(argc < 3)
     {
-        std::cerr
-            << "too few arguments: usage: ./Unpacker <use encryption(t/f)> \n";
+        std::cerr << "too few arguments: usage: ./Unpacker <use "
+                     "encryption(t/f)> <path to Pak_dir.rpk> \n";
         return 1;
     }
 
@@ -355,15 +363,21 @@ main(int argc, char *argv[])
     auto key
         = std::make_unique<unsigned char[]>(crypto_aead_aegis256_KEYBYTES);
 
+    std::filesystem::path root(argv[2]);
+    if(!root.has_filename())
+    {
+        root = root / "Pak_dir.rpk";
+    }
+
     if(encrypt)
     {
-        std::ifstream file("key");
+        std::ifstream file(root.parent_path() / "key");
         file.read(reinterpret_cast<char *>(key.get()),
                   crypto_aead_aegis256_KEYBYTES);
         file.close();
     }
 
-    RPK npk("./Pak_dir.rpk", encrypt, key.get());
+    RPK npk(root, encrypt, key.get());
 
     auto files = npk.get_Files();
 
@@ -373,11 +387,17 @@ main(int argc, char *argv[])
 
         if(file.path.has_parent_path())
         {
-            std::filesystem::create_directories(file.path.parent_path());
+            std::filesystem::create_directories(root.parent_path()
+                                                / file.path.parent_path());
         }
 
-        std::ofstream of("." / file.path);
-        of.write(reinterpret_cast<char *>(file.data.data()), file.data.size());
+        std::ofstream of(root.parent_path() / file.path);
+        if(!of.is_open())
+        {
+            std::cerr << "failed to open file: " << root / file.path
+                      << std::endl;
+        }
+        of.write(reinterpret_cast<char *>(data->data()), data->size());
         of.close();
     }
 

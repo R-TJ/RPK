@@ -51,7 +51,7 @@ struct file
 class RPK
 {
 public:
-	RPK(std::string pak_dir, bool encrypt, unsigned char* key);
+	RPK(std::filesystem::path pak_dir, bool encrypt, unsigned char* key);
 	~RPK();
 
 	std::vector<unsigned char>* LoadFile(std::string path);

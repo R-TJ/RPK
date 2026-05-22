@@ -41,7 +41,8 @@ packFolder(const std::filesystem::path &folderPath,
     std::filesystem::path archivesPath
         = "Pak_" + std::to_string(archives) + ".rpk";
 
-    std::ofstream of(archivesPath, std::ios::binary);
+    std::ofstream of(folderPath.parent_path() / archivesPath,
+                     std::ios::binary);
 
     if(!of.is_open())
     {
@@ -129,7 +130,7 @@ packFolder(const std::filesystem::path &folderPath,
             archives++;
             archivesPath = "Pak_" + std::to_string(archives) + ".rpk";
 
-            of.open(archivesPath, std::ios::binary);
+            of.open(folderPath.parent_path() / archivesPath, std::ios::binary);
 
             if(!of.is_open())
             {
@@ -153,7 +154,8 @@ packFolder(const std::filesystem::path &folderPath,
         }
     }
 
-    std::ofstream Pak_dir("Pak_dir.rpk", std::ios::binary);
+    std::ofstream Pak_dir(folderPath.parent_path() / "Pak_dir.rpk",
+                          std::ios::binary);
 
     if(!Pak_dir.is_open())
     {
