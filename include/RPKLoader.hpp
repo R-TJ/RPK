@@ -7,12 +7,15 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <future>
+#include <thread>
 
 #include "lz4.h"
 
-
 #include "sodium.h"
 #include "sodium/crypto_aead_aegis256.h"
+
+#include "thread.hpp"
 
 
 #ifdef _WIN32
@@ -54,7 +57,7 @@ public:
 	RPK(std::filesystem::path pak_dir, bool encrypt, unsigned char* key);
 	~RPK();
 
-	std::vector<unsigned char>* LoadFile(std::string path);
+    std::future<std::vector<unsigned char>*> LoadFile(std::filesystem::path path);
     
     std::vector<archive>* get_Archives() {return &archives;};
     std::vector<file>* get_Files() {return &files;};
@@ -70,6 +73,7 @@ private:
     int un_map_file(std::string& file_path);
 	std::vector<archive> archives;
 	std::vector<file> files;
+    std::vector<std::unique_ptr<std::mutex>> locks;
 
     std::unique_ptr<unsigned char[]> unencrypted;
 
@@ -77,4 +81,8 @@ private:
     float MS = 0;
     float MB = 0;
     float old_time = 0;
+
+    std::unique_ptr<Thread_pool> tp;
+    std::mutex archive_lock;
+    std::mutex map_mtx;
 };

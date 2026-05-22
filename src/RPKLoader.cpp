@@ -135,6 +135,13 @@ RPK::un_map_file(std::string &file_path)
 
 RPK::RPK(std::filesystem::path pak_dir, bool encrypt, unsigned char *key)
 {
+    unsigned int hc = std::thread::hardware_concurrency();
+    if(hc == 0)
+    {
+        hc = 1;
+    }
+    tp = std::make_unique<Thread_pool>(hc);
+
     std::filesystem::path parent_path = pak_dir.parent_path();
 
     if(sodium_init() < 0)
@@ -197,6 +204,11 @@ RPK::RPK(std::filesystem::path pak_dir, bool encrypt, unsigned char *key)
     }
 
     files.resize(filecount);
+    locks.resize(filecount);
+    for(auto &lock : locks)
+    {
+        lock = std::make_unique<std::mutex>();
+    }
     if(files.size() != filecount)
     {
         std::cerr << "Failed to resize vector: files\n";
@@ -241,87 +253,102 @@ RPK::RPK(std::filesystem::path pak_dir, bool encrypt, unsigned char *key)
     }
 }
 
-std::vector<unsigned char> *
-RPK::LoadFile(std::string filePath)
+std::future<std::vector<unsigned char> *>
+RPK::LoadFile(std::filesystem::path filePath)
 {
-    for(auto &file : files)
+    for(size_t i = 0; i < files.size(); i++)
     {
-        if(file.path.generic_string() == filePath)
+        auto *file = &files[i];
+        if(file->path.generic_string() == filePath)
         {
-            auto start = std::chrono::steady_clock::now();
+            auto future = tp->enqueue([this, file,
+                                       i]() -> std::vector<unsigned char> * {
+                std::unique_lock<std::mutex> file_lock(*locks[i]);
+                auto start = std::chrono::steady_clock::now();
 
-            bool archived = false;
-            const char *archive_ptr;
-            if(archives.size() >= MAX_OPEN_FILES)
-            {
-                unMap();
-                archives.resize(0);
-            }
-            for(auto &archive : archives)
-            {
-                if(archive.path == file.archivepath)
+                bool archived = false;
+                const char *archive_ptr;
+                std::unique_lock<std::mutex> lock(archive_lock);
+                std::unique_lock<std::mutex> map(map_mtx);
+                if(archives.size() >= MAX_OPEN_FILES)
                 {
-                    archived = true;
-                    archive_ptr = archive.data;
-                    break;
+                    unMap();
+                    archives.resize(0);
                 }
-            }
-
-            if(!archived)
-            {
-                int err = mapFile(file.archivepath.generic_string());
-                if(err < 0)
+                for(auto &archive : archives)
                 {
-                    std::cerr << "mmap failed with code: " << err << std::endl;
+                    if(archive.path == file->archivepath)
+                    {
+                        archived = true;
+                        archive_ptr = archive.data;
+                        break;
+                    }
+                }
+
+                if(!archived)
+                {
+                    std::cout << file->archivepath << std::endl;
+                    int err = mapFile(file->archivepath.generic_string());
+                    if(err < 0)
+                    {
+                        std::cerr << "mmap failed with code: " << err
+                                  << std::endl;
+                        return {};
+                    }
+                    archive_ptr = archives.back().data;
+                }
+                lock.unlock();
+
+                if(file->loaded == true)
+                {
+                    return &file->data;
+                }
+
+                file->data.resize(file->size);
+                std::memcpy(file->data.data(), archive_ptr + file->offset,
+                            file->data.size());
+                map.unlock();
+
+                std::vector<unsigned char> decompData(file->originalsize);
+
+                int result = LZ4_decompress_safe(
+                    reinterpret_cast<char *>(file->data.data()),
+                    reinterpret_cast<char *>(decompData.data()),
+                    file->data.size(), file->originalsize);
+
+                if(result <= 0)
+                {
+                    std::cerr << "Failed to decompress" << file->path
+                              << std::endl
+                              << file->archivepath << std::endl;
                     return {};
                 }
-                archive_ptr = archives.back().data;
-            }
 
-            if(file.loaded == true)
-            {
-                return &file.data;
-            }
+                file->data = std::move(decompData);
 
-            file.data.resize(file.size);
-            std::memcpy(file.data.data(), archive_ptr + file.offset,
-                        file.data.size());
+                file->loaded = true;
 
-            std::vector<unsigned char> decompData(file.originalsize);
+                auto end = std::chrono::steady_clock::now();
+                auto time = end - start;
+                auto time_dur
+                    = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          time)
+                          .count();
 
-            int result = LZ4_decompress_safe(
-                reinterpret_cast<char *>(file.data.data()),
-                reinterpret_cast<char *>(decompData.data()), file.data.size(),
-                file.originalsize);
+                MS += time_dur;
+                MB += file->originalsize / 1000000.0f;
+                float diff = MS - old_time;
+                if(diff > 500)
+                {
+                    MB_P_S = MB / (MS / 1000.0f);
+                    std::cout << MB_P_S << "mb/s\n";
+                    old_time = MS;
+                }
 
-            if(result <= 0)
-            {
-                std::cerr << "Failed to decompress" << file.path << std::endl
-                          << file.archivepath << std::endl;
-                return {};
-            }
+                return &file->data;
+            });
 
-            file.data = std::move(decompData);
-
-            file.loaded = true;
-
-            auto end = std::chrono::steady_clock::now();
-            auto time = end - start;
-            auto time_dur
-                = std::chrono::duration_cast<std::chrono::milliseconds>(time)
-                      .count();
-
-            MS += time_dur;
-            MB += file.originalsize / 1000000.0f;
-            float diff = MS - old_time;
-            if(diff > 500)
-            {
-                MB_P_S = MB / (MS / 1000.0f);
-                std::cout << MB_P_S << "mb/s\n";
-                old_time = MS;
-            }
-
-            return &file.data;
+            return future;
         }
     }
 
@@ -371,7 +398,7 @@ main(int argc, char *argv[])
 
     if(encrypt)
     {
-        std::ifstream file(root.parent_path() / "key");
+        std::ifstream file(root.parent_path() / "key.bin");
         file.read(reinterpret_cast<char *>(key.get()),
                   crypto_aead_aegis256_KEYBYTES);
         file.close();
@@ -397,7 +424,8 @@ main(int argc, char *argv[])
             std::cerr << "failed to open file: " << root / file.path
                       << std::endl;
         }
-        of.write(reinterpret_cast<char *>(data->data()), data->size());
+        auto dt = data.get();
+        of.write(reinterpret_cast<char *>(dt->data()), dt->size());
         of.close();
     }
 

@@ -302,7 +302,8 @@ main(int argc, char *argv[])
 
     if(encrypt)
     {
-        std::ofstream of("key.bin", std::ios::binary);
+        std::filesystem::path path(argv[1]);
+        std::ofstream of(path.parent_path() / "key.bin", std::ios::binary);
         if(!of.is_open())
         {
             std::cerr << "Failed to open key save file";

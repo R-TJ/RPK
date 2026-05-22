@@ -1,3 +1,2 @@
-Fix multi file open fault
 multithreaded decompression + read
-read Pak_dir from folders other than the same as working dir
+Asset serialisation
