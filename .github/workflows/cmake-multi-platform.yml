@@ -55,6 +55,7 @@ jobs:
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
     - name: Install dependencies
+      if: matrix.os == 'ubuntu-latest'
       run: sudo apt install autoconf autoconf-archive automake libtool
 
     - name: run-vcpkg
