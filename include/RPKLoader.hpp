@@ -40,11 +40,11 @@ struct archive
 };
 struct file
 {
-    size_t offset;
-    size_t size;
-    size_t originalsize;
-    size_t pathsize;
-    size_t archivepathsize;
+    uint64_t offset;
+    uint64_t size;
+    uint64_t originalsize;
+    uint64_t pathsize;
+    uint64_t archivepathsize;
     std::filesystem::path path;
     std::filesystem::path archivepath;
     std::vector<unsigned char> data;

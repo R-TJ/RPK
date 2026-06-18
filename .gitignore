@@ -36,11 +36,19 @@
 # debug information files
 *.dwo
 
+# Mac finder files
 .DS_Store
 
+# Build output folders
 /build/
 /build-*/
 
-*.npk
+# Testing archives
+*.rpk
 
+# symlinks to CMake exported files
 compile_commands.json
+
+# Automatic testing files
+test.sh
+test-*.sh

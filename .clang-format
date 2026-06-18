@@ -1,16 +1,11 @@
 BasedOnStyle: GNU
 IndentWidth: 4
-
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterControlStatement: true
   AfterFunction: true
   AfterClass: true
   BeforeElse: true
-
 SpaceBeforeParens: Never
-
-AlwaysBreakAfterReturnType: None
 BreakAfterReturnType: None
-
 SortIncludes: false

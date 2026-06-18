@@ -15,32 +15,34 @@ option(FULLCLI "Compile to unarchive from the terminal" ON)
 
 project(RPK LANGUAGES CXX)
 
-add_compile_definitions(LIBSODIUM_FAIL_CODE=-1 ENCRYPT_FAIL_CODE=-2 OFSTREAM_FAIL_CODE=-3 OFSTREAM_WRITE_FAIL=-4 PAK_DIR_FAIL_CODE=-5 TELLG_FAIL_CODE=-6 IFSTREAM_FAIL_CODE=-7 IFSTREAM_FAIL_READ_CODE=-8 OPEN_FAIL_CODE=-9 FSTAT_FAIL_CODE=-10 MMAP_FAIL_CODE=-11 UN_MAP_FAIL_CODE=-12 DECRYPT_FAIL_CODE=-13 VECTOR_RESIZE_FAIL_CODE=-14 TELLP_FAIL_CODE=-15)
+# Error codes
+add_compile_definitions(IFSTREAM_FAIL=-1 IFSTREAM_READ_FAIL=-2 LIBSODIUM_FAIL_CODE=-3 LZ4_FAIL=-4 OFSTREAM_FAIL=-5 OFSTREAM_WRITE_FAIL=-6)
 
-add_compile_definitions(MAX_OPEN_FILES=16)
+# Misc definitions
+add_compile_definitions(MAX_OPEN_FILES=16 SPEED_CHECK_DURATION=5)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(lz4 CONFIG REQUIRED)
-find_package(unofficial-sodium CONFIG REQUIRED)
+find_package(libsodium CONFIG REQUIRED)
 
 add_library(RPK STATIC)
 
 target_sources(RPK 
     PRIVATE 
-     src/RPKPacker.cpp 
-     src/RPKLoader.cpp
+     src/Packer.cpp 
+     src/Loader.cpp
     
     PUBLIC
      FILE_SET HEADERS
      FILES
-      include/RPKPacker.hpp
-      include/RPKLoader.hpp
+      include/Packer.hpp
+      include/Loader.hpp
   )
 
-target_link_libraries(RPK PUBLIC lz4::lz4 unofficial-sodium::sodium)
+target_link_libraries(RPK PUBLIC lz4::lz4 libsodium::sodium)
 target_include_directories(RPK PUBLIC include)
 
 if(CLI)
@@ -48,10 +50,10 @@ if(CLI)
 
     target_sources(Packer
         PRIVATE
-         src/RPKPacker.cpp
+         src/Packer.cpp
     )
 
-    target_link_libraries(Packer lz4::lz4 unofficial-sodium::sodium)
+    target_link_libraries(Packer lz4::lz4 libsodium::sodium)
 
     target_compile_definitions(Packer PRIVATE CLI)
     target_include_directories(Packer PUBLIC include)
@@ -62,10 +64,10 @@ if(FULLCLI)
 
     target_sources(Unpacker
         PRIVATE
-         src/RPKLoader.cpp
+         src/Loader.cpp
      )
 
-     target_link_libraries(Unpacker lz4::lz4 unofficial-sodium::sodium)
+     target_link_libraries(Unpacker lz4::lz4 libsodium::sodium)
 
      target_compile_definitions(Unpacker PRIVATE CLI)
 

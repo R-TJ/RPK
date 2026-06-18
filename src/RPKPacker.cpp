@@ -210,10 +210,12 @@ packFolder(const std::filesystem::path &folderPath,
                     sizeof(file.archive_path_size));
         offset += sizeof(file.archive_path_size);
 
-        std::memcpy(pak_data.get() + offset, file.path.data(), file.path_size);
+        std::string temp = file.path.generic_string();
+        std::memcpy(pak_data.get() + offset, temp.data(), file.path_size);
         offset += file.path_size;
 
-        std::memcpy(pak_data.get() + offset, file.archive_path.data(),
+        temp = file.archive_path.generic_string();
+        std::memcpy(pak_data.get() + offset, temp.data(),
                     file.archive_path_size);
         offset += file.archive_path_size;
     }
