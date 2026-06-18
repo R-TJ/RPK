@@ -26,7 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(lz4 CONFIG REQUIRED)
-find_package(libsodium CONFIG REQUIRED)
+find_package(unofficial-sodium CONFIG REQUIRED)
 
 add_library(RPK STATIC)
 
@@ -42,7 +42,7 @@ target_sources(RPK
       include/Loader.hpp
   )
 
-target_link_libraries(RPK PUBLIC lz4::lz4 libsodium::sodium)
+target_link_libraries(RPK PUBLIC lz4::lz4 unofficial-sodium::sodium)
 target_include_directories(RPK PUBLIC include)
 
 if(CLI)
@@ -53,7 +53,7 @@ if(CLI)
          src/Packer.cpp
     )
 
-    target_link_libraries(Packer lz4::lz4 libsodium::sodium)
+    target_link_libraries(Packer lz4::lz4 unofficial-sodium::sodium)
 
     target_compile_definitions(Packer PRIVATE CLI)
     target_include_directories(Packer PUBLIC include)
@@ -67,7 +67,7 @@ if(FULLCLI)
          src/Loader.cpp
      )
 
-     target_link_libraries(Unpacker lz4::lz4 libsodium::sodium)
+     target_link_libraries(Unpacker lz4::lz4 unofficial-sodium::sodium)
 
      target_compile_definitions(Unpacker PRIVATE CLI)
 
