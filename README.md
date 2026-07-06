@@ -16,7 +16,8 @@ Only has Mac and Linux support because I have no way to test on Windows and no r
 ```
 git clone github.com/Desnio/RPK.git
 cd RPK
-CMake -B build
+cmake -B build
+cmake --build build
 ```
 
 ## Usage
