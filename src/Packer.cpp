@@ -1,5 +1,6 @@
 #include "include/Packer.hpp"
 
+// File is our own struct, not the normal File* that is returned from fopen()
 File
 load_file(std::filesystem::path path)
 {
