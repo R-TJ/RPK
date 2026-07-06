@@ -3,7 +3,7 @@ A folder archiver designed to be used in game engines
 
 Still to be finished and I still have to finish the README
 
-Only has Mac and Linux support because I have no way to test on Windows and no reason to learn Windows only functions
+Only has Mac and Linux support because I have no way to test on Windows and no reason to learn WIN32 API
 
 ## Installation
 ### Requirements
