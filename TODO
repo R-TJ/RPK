@@ -1,2 +1,4 @@
+ensure unpacker version and pak version match 
 multithreaded decompression + read
 Asset serialisation
+encryption levels
